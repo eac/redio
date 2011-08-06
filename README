@@ -1,0 +1,38 @@
+What's this?
+
+A rough draft for a basic IO interface to Redis. It's goal is to provide distributed and fault tolerant temporary file access.
+
+Usage:
+
+# Copy a file from Redis to S3
+upload = Net::HTTP::Post.new('12345.txt').tap do |request|
+  request.body_stream = Redio::TempFile.open('12345.txt', :client => cluster)
+end
+response = Net::HTTP.new('amazon_s3').start { |http| http.request(upload) }
+
+See /examples for more.
+
+Components:
+
+### TempFile
+  These are stored as Strings, which are limited to 512MB.
+    :digest   => md5          - the digest to compare against after closing. If there's a mismatch, an exception is thrown.
+    :verifier => digest_class - Whatever was used to generate the digest if not MD5. e.g. Digest::SHA1
+    :client   => redis        - A client that supports Redis commands.
+
+### Cluster distributed commands:
+  Distributed commands are executed on every node in the cluster.
+    :minimum => X - the minimum number of nodes the command must succeed
+    :limit   => X - return early after succeeding on X nodes
+
+FAQ:
+Q: What happens when one the servers is down?
+A: As long as the command executes on the minimum required servers, the failure is ignored.
+   If it is unable to execute on the minimum number of servers, the last failure exception is raised.
+
+Q: What if the data is only partially read/written before a server crashes?
+A: When a command has error detection enabled, MD5 digests are generated for the inserted values.
+   If there is an MD5 mismatch, the command is considered failed.
+
+Q: How does data stay synchronized across servers?
+A: Via expiry. Distributing commands across data that isn't simple and expiring is probably a bad idea.
